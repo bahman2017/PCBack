@@ -1,92 +1,194 @@
-# PatentClarity Backend Status
+# PatentClarity – Project Status
 
-Project: PatentClarity  
-Backend: PCBack  
-Framework: ASP.NET Core Web API  
-Database: Not integrated yet  
-AI Layer: Placeholder
+Last Updated: 2026-03-16
 
-Date: March 17, 2026
+---
 
-## Current Development Stage
+# Current Phase
 
-We are building the MVP backend for the PatentClarity platform.
+MVP Backend – Core AI Patent Analysis Engine
 
-The goal of the MVP is to allow a user to input a patent number or patent abstract and receive an AI-generated commercialization report.
+The backend now supports real patent metadata retrieval and AI-driven commercialization analysis.
 
-## Current Backend Architecture
+---
 
-Controller → Service Layer → AI Service
+# Completed Components
 
-Components implemented:
+## 1. Backend API (ASP.NET Core)
 
-Controllers
-- PatentsController
+Project: PCBack
 
-Services
-- PatentService (placeholder)
-- AiAnalysisService (placeholder)
-
-Models
-- PatentAnalysisRequest
-- PatentMetadata
-- CommercialReport
-
-## Implemented API
+Main endpoint implemented:
 
 POST /api/patents/analyze
 
-Request example:
+Input:
+- PatentNumber
+- or PatentAbstract
 
-{
-  "PatentNumber": "US1234567"
-}
+Output:
+Commercialization analysis report.
 
-or
+---
 
-{
-  "Abstract": "A method for improving battery efficiency..."
-}
+## 2. Patent Metadata Retrieval
 
-Validation:
+Integrated with PatentSearch / PatentsView API.
 
-Return 400 if both PatentNumber and Abstract are missing.
+The system now retrieves:
 
-Behavior:
+- Patent title
+- Abstract
+- Owner / Assignee
+- Patent date
+- Status (Active / Expired)
 
-1. If PatentNumber is provided:
-   PatentService.GetPatentMetadataAsync()
+Flow:
 
-2. If Abstract is provided:
-   Used for AI analysis
+User Input  
+→ Patent API  
+→ Metadata Extraction
 
-3. AiAnalysisService.GenerateCommercialReportAsync()
+---
 
-Response model:
+## 3. AI Prompt Pipeline
 
-CommercialReport
+AI prompt system implemented.
 
-Fields:
+Components:
 
-- Title
-- PatentOwner
-- PatentStatus
-- TechnologyTags
-- PotentialMarkets
-- CommercialOpportunities
+AI/
+- PromptTemplates
+- PromptBuilder
+- AiClient
+- AiAnalysisResult
 
-## Current Limitations
+Prompt requests structured output including:
 
-PatentService returns placeholder metadata.
+- technologyTags
+- potentialMarkets
+- commercialOpportunities
 
-AiAnalysisService returns a fixed mock commercialization report.
+The model is instructed to return valid JSON only.
 
-No external APIs are integrated yet.
+---
 
-## Next Development Tasks
+## 4. JSON Parsing System
 
-1. Integrate real patent metadata (PatentsView API)
-2. Replace AI placeholder with real LLM analysis
-3. Store reports in PostgreSQL
-4. Add user accounts
-5. Add payment flow for report generation
+Robust parsing implemented.
+
+Process:
+
+LLM Output  
+→ JSON extraction  
+→ Deserialization → AiAnalysisResult
+
+Failure handling:
+
+If parsing fails or no JSON is returned:
+
+TechnologyTags = []  
+PotentialMarkets = []  
+CommercialOpportunities = []
+
+System remains stable.
+
+---
+
+## 5. OpenAI Integration
+
+Real LLM integration implemented.
+
+File:
+AI/AiClient.cs
+
+Uses:
+
+POST https://api.openai.com/v1/chat/completions
+
+Model:
+
+gpt-4o-mini
+
+Configuration:
+
+OpenAI:ApiKey
+
+Recommended usage:
+
+Environment variable
+
+OpenAI__ApiKey
+
+or User Secrets.
+
+If the API key is missing or request fails:
+
+The system returns an empty AI result instead of crashing.
+
+---
+
+## 6. Dependency Injection
+
+AiClient registered via HttpClient.
+
+Program.cs
+
+AddHttpClient<IAiClient, AiClient>()
+
+BaseAddress:
+
+https://api.openai.com/
+
+---
+
+# Current System Flow
+
+Patent Number / Abstract  
+→ Patent API Metadata  
+→ PromptBuilder  
+→ OpenAI Analysis  
+→ JSON Parsing  
+→ Commercial Report
+
+---
+
+# Current Limitations (To Be Implemented)
+
+Database persistence is not implemented yet.
+
+Missing components:
+
+- Patent analysis storage
+- Result caching
+- User accounts
+- Usage tracking
+
+These will be implemented in the next phase.
+
+---
+
+# Next Development Phase
+
+Phase: Data Persistence Layer
+
+Planned work:
+
+1. PostgreSQL database integration
+2. EF Core models
+3. PatentAnalysis table
+4. PatentAnalysisResult table
+5. Metadata caching
+6. Analysis history
+
+---
+
+# Project Health
+
+Backend status: Stable  
+AI integration: Working  
+Build status: Successful
+
+The core AI patent analysis pipeline is operational.
+
+Next focus: persistence and cost optimization.
