@@ -3,17 +3,18 @@ using System.Text.Json.Serialization;
 namespace PCBack.Services;
 
 /// <summary>
-/// Internal DTOs for PatentsView API request and response.
+/// Internal DTOs for PatentsView PatentSearch API request and response.
 /// </summary>
 
 internal sealed class PatentsViewRequest
 {
-    [JsonPropertyName("q")]
-    public PatentsViewQuery Q { get; set; } = new();
+    [JsonPropertyName("filter")]
+    public PatentsViewFilter Filter { get; set; } = new();
 
-    [JsonPropertyName("f")]
-    public string[] F { get; set; } =
+    [JsonPropertyName("fields")]
+    public string[] Fields { get; set; } =
     {
+        "patent_number",
         "patent_title",
         "patent_abstract",
         "assignee_organization",
@@ -21,16 +22,16 @@ internal sealed class PatentsViewRequest
     };
 }
 
-internal sealed class PatentsViewQuery
+internal sealed class PatentsViewFilter
 {
     [JsonPropertyName("patent_number")]
-    public string PatentNumber { get; set; } = string.Empty;
+    public string[] PatentNumber { get; set; } = Array.Empty<string>();
 }
 
 internal sealed class PatentsViewResponse
 {
-    [JsonPropertyName("patents")]
-    public List<PatentsViewPatent>? Patents { get; set; }
+    [JsonPropertyName("data")]
+    public List<PatentsViewPatent>? Data { get; set; }
 }
 
 internal sealed class PatentsViewPatent

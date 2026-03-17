@@ -5,7 +5,7 @@ namespace PCBack.Services;
 
 public class PatentService : IPatentService
 {
-    private const string PatentsViewQueryUrl = "https://api.patentsview.org/patents/query";
+    private const string PatentsViewSearchUrl = "https://search.patentsview.org/api/v1/patents";
     private const int PatentTermYears = 20;
 
     private readonly HttpClient _httpClient;
@@ -22,10 +22,10 @@ public class PatentService : IPatentService
 
         var request = new PatentsViewRequest
         {
-            Q = new PatentsViewQuery { PatentNumber = patentNumber.Trim() }
+            Filter = new PatentsViewFilter { PatentNumber = new[] { patentNumber.Trim() } }
         };
 
-        using var response = await _httpClient.PostAsJsonAsync(PatentsViewQueryUrl, request);
+        using var response = await _httpClient.PostAsJsonAsync(PatentsViewSearchUrl, request);
 
         if (!response.IsSuccessStatusCode)
             return null;
@@ -33,10 +33,10 @@ public class PatentService : IPatentService
         var json = await response.Content.ReadAsStringAsync();
         var apiResponse = JsonSerializer.Deserialize<PatentsViewResponse>(json);
 
-        if (apiResponse?.Patents is not { Count: > 0 })
+        if (apiResponse?.Data is not { Count: > 0 })
             return null;
 
-        var patent = apiResponse.Patents[0];
+        var patent = apiResponse.Data[0];
         var status = ComputePatentStatus(patent.PatentDate);
 
         var owner = patent.Assignees?
