@@ -26,3 +26,4 @@
 /Users/bahmanmasarratbakhsh/myinfo/PCBack/src/PCBack/obj/Debug/net9.0/PCBack.pdb
 /Users/bahmanmasarratbakhsh/myinfo/PCBack/src/PCBack/obj/Debug/net9.0/PCBack.genruntimeconfig.cache
 /Users/bahmanmasarratbakhsh/myinfo/PCBack/src/PCBack/obj/Debug/net9.0/ref/PCBack.dll
+/Users/bahmanmasarratbakhsh/myinfo/PCBack/src/PCBack/obj/Debug/net9.0/PCBack.sourcelink.json
