@@ -1,47 +1,71 @@
 # API Documentation
 
+Base URL (local dev): `http://localhost:5000` (see `Properties/launchSettings.json`).
+
+JSON responses use **camelCase** property names by default (ASP.NET Core).
+
+---
+
 ## POST /api/patents/analyze
 
-Description:
+Analyzes a patent (by number and/or abstract) and returns a commercialization-style report.
 
-Analyzes a patent and generates a commercialization report.
+### Request body
 
-Request Body:
+`PatentAnalysisRequest`
 
-PatentAnalysisRequest
+| Field | Type | Required |
+|--------|------|----------|
+| `patentNumber` | string | No (one of patent number or abstract) |
+| `abstract` | string | No |
 
-Fields:
+**Validation:** HTTP **400** if both `patentNumber` and `abstract` are missing or whitespace-only.
 
-PatentNumber (optional)
-Abstract (optional)
+**Behavior:**
 
-Example:
+1. If `patentNumber` is set: `PatentService.GetPatentMetadataAsync` calls PatentSearch; abstract for analysis comes from metadata when present, otherwise from the request `abstract`.
+2. If only `abstract` is set: that text is used for the AI pipeline.
+3. `AiAnalysisService.GenerateCommercialReportAsync` runs the prompt → OpenAI (when configured) → JSON parse → `CommercialReport`.
+4. When metadata exists, the controller overwrites `title`, `patentOwner`, and `patentStatus` on the report from metadata.
 
+### Example requests
+
+```json
 {
-  "PatentNumber": "US1234567"
+  "patentNumber": "10000000"
 }
+```
 
-or
-
+```json
 {
-  "Abstract": "A new method for improving lithium battery efficiency."
+  "abstract": "A new method for improving lithium battery efficiency."
 }
+```
 
-Validation:
+### Response
 
-If both fields are missing → HTTP 400
+`CommercialReport`
 
-Response:
+| Field | Type |
+|--------|------|
+| `title` | string |
+| `patentOwner` | string |
+| `patentStatus` | string |
+| `technologyTags` | string[] |
+| `potentialMarkets` | string[] |
+| `commercialOpportunities` | string[] |
 
-CommercialReport
+### Example response
 
-Example response:
-
+```json
 {
-  "Title": "Battery Efficiency Optimization",
-  "PatentOwner": "Example Corp",
-  "PatentStatus": "Active",
-  "TechnologyTags": ["Energy Storage", "Battery"],
-  "PotentialMarkets": ["Electric Vehicles", "Grid Storage"],
-  "CommercialOpportunities": ["Licensing to EV manufacturers"]
+  "title": "Battery Efficiency Optimization",
+  "patentOwner": "Example Corp",
+  "patentStatus": "Active",
+  "technologyTags": ["Energy Storage", "Battery"],
+  "potentialMarkets": ["Electric Vehicles", "Grid Storage"],
+  "commercialOpportunities": ["Licensing to EV manufacturers"]
 }
+```
+
+**Note:** List fields may be empty if OpenAI is not configured, the call fails, or the model response is not valid JSON for the expected shape.

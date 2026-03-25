@@ -2,165 +2,81 @@
 
 Project: PatentClarity  
 Backend: PCBack  
-Date: March 17, 2026
+Last updated: March 24, 2026
 
 ---
 
 # Purpose
 
-The AI Analysis Engine is responsible for transforming patent technical content into actionable business insights.
-
-Instead of summarizing patents, the system generates:
-
-• startup opportunities  
-• licensing possibilities  
-• product ideas  
-• potential markets  
-• competitor landscape  
-
-This component is the core intelligence layer of PatentClarity.
+The AI analysis layer turns patent text into **actionable business insight**: technology categories, markets, startup-style opportunities, and licensing angles—not a plain summary.
 
 ---
 
-# Input Data
+# Input
 
-The AI system receives:
+The pipeline uses **`PatentMetadata`** (from `PatentService` or built from abstract-only input):
 
-PatentMetadata
+- Title  
+- Abstract  
+- PatentOwner, PatentStatus (optional for prompting; controller still applies metadata to the final report)
 
-Fields:
-
-- Title
-- Abstract
-- PatentOwner
-- PatentStatus
-
-Additional data may later include:
-
-• full patent text
-• patent classification
-• citations
-• inventor information
+Future inputs may include full text, classifications, citations, inventors.
 
 ---
 
 # Output
 
-The AI engine produces a CommercialReport.
+**`CommercialReport`** (API-facing):
 
-Structure:
-
-CommercialReport
-
-Fields:
-
-Title  
-PatentOwner  
-PatentStatus  
-
-TechnologyTags  
-PotentialMarkets  
-CommercialOpportunities
-
-Future extensions may include:
-
-• competitor companies
-• estimated market size
-• startup opportunity scoring
+- Title, PatentOwner, PatentStatus (often filled from patent metadata in the controller)  
+- TechnologyTags, PotentialMarkets, CommercialOpportunities (from LLM JSON → `AiAnalysisResult`)
 
 ---
 
-# AI Processing Pipeline
+# Implemented pipeline
 
-The AI pipeline will follow these steps:
+1. **Preparation**  
+   `AiAnalysisService` builds a `PatentMetadata` with at least `Abstract` (and title when available via future extension).
 
-1. Patent Text Preparation
+2. **Prompt construction**  
+   `PromptBuilder` uses `PromptTemplates.CommercializationAnalysis` with `{title}` and `{abstract}` replaced. The template requires **strict JSON** with:
 
-Extract and normalize patent text:
+   - `technologyTags`  
+   - `potentialMarkets`  
+   - `commercialOpportunities`  
 
-- Title
-- Abstract
+3. **Model execution**  
+   `IAiClient` / `AiClient`: POST OpenAI `v1/chat/completions`, model `gpt-4o-mini`, temperature `0.2`. Config: `OpenAI:ApiKey`.
 
-Optional future steps:
-
-• keyword extraction
-• patent classification
-
----
-
-2. AI Prompt Construction
-
-A structured prompt will be built for the language model.
-
-Example prompt:
-
-"You are a technology commercialization expert.
-
-Analyze the following patent and identify:
-
-1. technology domain
-2. possible industries
-3. potential markets
-4. commercialization opportunities
-5. possible licensing strategies
-
-Patent Title:
-{title}
-
-Patent Abstract:
-{abstract}
-"
+4. **Parsing**  
+   Extract JSON object from text (handles minor wrapping), deserialize to **`AiAnalysisResult`**, map lists into **`CommercialReport`**. On failure: empty lists; no crash.
 
 ---
 
-3. AI Model Execution
+# Code layout
 
-The system sends the prompt to the AI model.
+| Location | Role |
+|----------|------|
+| `AI/PromptTemplates.cs` | System + user instructions, JSON schema |
+| `AI/PromptBuilder.cs` | `Build(PatentMetadata) → string` |
+| `AI/AiClient.cs` | `GenerateAsync(prompt) → string` |
+| `AI/OpenAiDto.cs` | OpenAI request/response shapes |
+| `AI/AiAnalysisResult.cs` | Parsed LLM JSON |
+| `Services/AiAnalysisService.cs` | Orchestration + parse |
 
-Possible models:
-
-• OpenAI
-• local LLM
-• enterprise LLM
-
-For MVP, a hosted LLM API will be used.
-
----
-
-4. Structured Output Parsing
-
-The AI output is parsed and mapped into:
-
-CommercialReport
-
-Fields:
-
-TechnologyTags  
-PotentialMarkets  
-CommercialOpportunities
+Controllers depend only on **`IAiAnalysisService`**; swapping prompts or LLM client does not change the HTTP contract.
 
 ---
 
-# Future Improvements
+# Future improvements
 
-Possible improvements to the AI engine include:
-
-• patent classification models
-• market size estimation
-• competitor detection
-• patent similarity search
-• opportunity scoring
+- Classification / embeddings, market sizing, competitor signals  
+- Structured output via OpenAI JSON mode or tool calls  
+- Prompt versioning, evals, and fallbacks  
+- Caching and persistence (see roadmap)
 
 ---
 
-# Key Design Principle
+# Design principle
 
-The AI engine should be modular.
-
-AiAnalysisService should be replaceable without modifying controllers.
-
-Controller → Service Layer → AI Engine
-
-This allows future improvements without breaking the API.
-
----
+Keep the AI stack **modular**: `IAiClient` and `PromptBuilder` are replaceable without changing `PatentsController`.

@@ -1,6 +1,6 @@
 # PatentClarity – Project Status
 
-Last Updated: 2026-03-16
+Last Updated: 2026-03-24
 
 ---
 
@@ -8,7 +8,7 @@ Last Updated: 2026-03-16
 
 MVP Backend – Core AI Patent Analysis Engine
 
-The backend now supports real patent metadata retrieval and AI-driven commercialization analysis.
+The backend supports real patent metadata retrieval (PatentSearch API) and AI-driven commercialization analysis (OpenAI).
 
 ---
 
@@ -18,177 +18,136 @@ The backend now supports real patent metadata retrieval and AI-driven commercial
 
 Project: PCBack
 
-Main endpoint implemented:
+Main endpoint:
 
 POST /api/patents/analyze
 
 Input:
-- PatentNumber
-- or PatentAbstract
+
+- PatentNumber (optional)
+- Abstract (optional; at least one required)
 
 Output:
-Commercialization analysis report.
+
+Commercialization analysis report (`CommercialReport`).
 
 ---
 
 ## 2. Patent Metadata Retrieval
 
-Integrated with PatentSearch / PatentsView API.
+Integrated with **PatentsView PatentSearch API** (not the discontinued legacy `api.patentsview.org/patents/query` endpoint).
 
-The system now retrieves:
+- **Endpoint used:** `POST https://search.patentsview.org/api/v1/patents`
+- **Implementation:** `Services/PatentService.cs` with internal DTOs in `Services/PatentsViewDto.cs`
+- **HTTP:** `HttpClient` registered via `AddHttpClient<IPatentService, PatentService>()`; primary handler uses `UseCookies = false` to avoid host-environment issues with `CookieContainer`.
+
+Retrieved fields (mapped to `PatentMetadata`):
 
 - Patent title
 - Abstract
-- Owner / Assignee
+- Owner / assignee (first `assignee_organization`)
 - Patent date
-- Status (Active / Expired)
+- Status: **Active** or **Expired** (20-year rule from `patent_date`)
 
 Flow:
 
-User Input  
-→ Patent API  
-→ Metadata Extraction
+User input → PatentSearch API → metadata extraction → optional merge into report in controller
 
 ---
 
 ## 3. AI Prompt Pipeline
 
-AI prompt system implemented.
+Components under `src/PCBack/AI/`:
 
-Components:
+| File | Role |
+|------|------|
+| `PromptTemplates.cs` | Base commercialization prompt; instructs JSON-only output |
+| `PromptBuilder.cs` | Builds prompt from `PatentMetadata` (title + abstract) |
+| `AiClient.cs` | `IAiClient` – OpenAI chat completions |
+| `OpenAiDto.cs` | Request/response DTOs for OpenAI |
+| `AiAnalysisResult.cs` | Parsed LLM JSON (technologyTags, potentialMarkets, commercialOpportunities) |
 
-AI/
-- PromptTemplates
-- PromptBuilder
-- AiClient
-- AiAnalysisResult
+Orchestration: `Services/AiAnalysisService.cs` (implements `IAiAnalysisService`).
 
-Prompt requests structured output including:
+Structured LLM output:
 
-- technologyTags
-- potentialMarkets
-- commercialOpportunities
+- `technologyTags`
+- `potentialMarkets`
+- `commercialOpportunities`
 
-The model is instructed to return valid JSON only.
+The model is instructed to return **valid JSON only** (no prose outside the JSON object).
 
 ---
 
 ## 4. JSON Parsing System
 
-Robust parsing implemented.
+Flow:
 
-Process:
+LLM text → extract `{ ... }` block (regex) → `JsonSerializer.Deserialize<AiAnalysisResult>` → map to `CommercialReport`
 
-LLM Output  
-→ JSON extraction  
-→ Deserialization → AiAnalysisResult
+If parsing fails or the response is empty:
 
-Failure handling:
-
-If parsing fails or no JSON is returned:
-
-TechnologyTags = []  
-PotentialMarkets = []  
-CommercialOpportunities = []
-
-System remains stable.
+- `TechnologyTags`, `PotentialMarkets`, `CommercialOpportunities` end up empty (or empty after failed deserialize).
+- The API does not crash.
 
 ---
 
 ## 5. OpenAI Integration
 
-Real LLM integration implemented.
+File: `AI/AiClient.cs`
 
-File:
-AI/AiClient.cs
+- **POST** `https://api.openai.com/v1/chat/completions` (relative path `v1/chat/completions` on `HttpClient` base address)
+- **Model:** `gpt-4o-mini`
+- **Configuration:** `OpenAI:ApiKey` in configuration
 
-Uses:
+Recommended:
 
-POST https://api.openai.com/v1/chat/completions
+- Environment variable `OpenAI__ApiKey`, or
+- User Secrets (do not commit keys)
 
-Model:
+If the API key is missing or the request fails:
 
-gpt-4o-mini
-
-Configuration:
-
-OpenAI:ApiKey
-
-Recommended usage:
-
-Environment variable
-
-OpenAI__ApiKey
-
-or User Secrets.
-
-If the API key is missing or request fails:
-
-The system returns an empty AI result instead of crashing.
+- `GenerateAsync` returns an empty string; downstream parsing yields empty lists where applicable.
 
 ---
 
-## 6. Dependency Injection
+## 6. Dependency Injection (`Program.cs`)
 
-AiClient registered via HttpClient.
-
-Program.cs
-
-AddHttpClient<IAiClient, AiClient>()
-
-BaseAddress:
-
-https://api.openai.com/
+- `AddHttpClient<IPatentService, PatentService>()` + `SocketsHttpHandler { UseCookies = false }`
+- `AddHttpClient<IAiClient, AiClient>()` with `BaseAddress` `https://api.openai.com/`
+- `AddSingleton<PromptBuilder>()`
+- `AddScoped<IAiAnalysisService, AiAnalysisService>()`
 
 ---
 
 # Current System Flow
 
-Patent Number / Abstract  
-→ Patent API Metadata  
-→ PromptBuilder  
-→ OpenAI Analysis  
-→ JSON Parsing  
-→ Commercial Report
+Patent number / abstract → PatentSearch metadata (if number) → `PromptBuilder` → OpenAI → JSON parse → `CommercialReport` (controller fills title/owner/status from metadata when present)
 
 ---
 
 # Current Limitations (To Be Implemented)
 
-Database persistence is not implemented yet.
-
-Missing components:
-
-- Patent analysis storage
-- Result caching
-- User accounts
-- Usage tracking
-
-These will be implemented in the next phase.
+- No database persistence
+- No result caching
+- No user accounts or usage tracking
 
 ---
 
 # Next Development Phase
 
-Phase: Data Persistence Layer
+**Phase: Data persistence**
 
-Planned work:
-
-1. PostgreSQL database integration
-2. EF Core models
-3. PatentAnalysis table
-4. PatentAnalysisResult table
-5. Metadata caching
-6. Analysis history
+1. PostgreSQL + EF Core
+2. `PatentAnalysis` / result tables
+3. Metadata and analysis history caching
 
 ---
 
 # Project Health
 
-Backend status: Stable  
-AI integration: Working  
-Build status: Successful
-
-The core AI patent analysis pipeline is operational.
+Backend: stable  
+AI integration: operational when `OpenAI:ApiKey` is set  
+Build: successful
 
 Next focus: persistence and cost optimization.

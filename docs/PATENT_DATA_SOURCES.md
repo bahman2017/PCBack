@@ -2,155 +2,83 @@
 
 Project: PatentClarity  
 Backend: PCBack  
-Date: March 17, 2026
+Last updated: March 24, 2026
 
 ---
 
 # Purpose
 
-PatentClarity needs reliable patent data sources to retrieve patent metadata such as:
-
-• patent title  
-• abstract  
-• assignee (owner)  
-• filing date  
-• patent status  
-
-This document lists the main APIs and datasets that can be integrated into the backend.
+PatentClarity needs reliable sources for **title, abstract, assignee, filing/grant date**, and derived **status** (e.g. Active vs Expired). This document lists APIs and datasets relevant to the backend.
 
 ---
 
-# 1. PatentsView API (Recommended for MVP)
+# 1. PatentsView PatentSearch API (current MVP integration)
 
-Website:
-https://patentsview.org
+**Website / docs:** [patentsview.org](https://patentsview.org) — transition and Search API references.
 
-Description:
+**Endpoint used in PCBack:**
 
-PatentsView is an official patent data platform supported by the USPTO.
+`POST https://search.patentsview.org/api/v1/patents`
 
-It provides free access to structured patent metadata.
+**Request shape (simplified):**
 
-Advantages:
+```json
+{
+  "filter": { "patent_number": ["10000000"] },
+  "fields": [
+    "patent_number",
+    "patent_title",
+    "patent_abstract",
+    "assignee_organization",
+    "patent_date"
+  ]
+}
+```
 
-• Free  
-• No API key required  
-• JSON API  
-• Good documentation  
+**Response:** JSON with a `data` array of patent objects (including `assignees` with `assignee_organization`).
 
-Example query:
+**Implementation:** `PatentService` + internal DTOs in `Services/PatentsViewDto.cs`.
 
-https://api.patentsview.org/patents/query?q={"patent_number":"1234567"}
+**Notes:**
 
-Example fields:
-
-patent_title  
-patent_abstract  
-assignee_organization  
-patent_date
-
-Use case in PatentClarity:
-
-Used by PatentService to retrieve metadata when a user submits a patent number.
+- The **legacy** `https://api.patentsview.org/patents/query` endpoint is discontinued; PCBack uses the Search API above.
+- PatentsView continues to evolve (e.g. USPTO Open Data Portal migration); monitor official notices.
 
 ---
 
 # 2. Google Patents
 
-Website:
-https://patents.google.com
+**Website:** https://patents.google.com
 
-Description:
-
-Google Patents provides access to worldwide patent data.
-
-Advantages:
-
-• very large dataset
-• global coverage
-
-Limitations:
-
-• no official public API
-• requires scraping or third-party APIs
-
-Use case:
-
-Possible future data source for global patents.
+Large global index; **no official public API** for the same use case. Possible future: partner APIs or licensed feeds.
 
 ---
 
 # 3. USPTO Open Data Portal
 
-Website:
-https://developer.uspto.gov
+**Website:** https://developer.uspto.gov / https://data.uspto.gov
 
-Description:
-
-Official patent datasets provided by the United States Patent and Trademark Office.
-
-Advantages:
-
-• official data source
-• reliable data
-
-Limitations:
-
-• large datasets
-• not optimized for quick API queries
-
-Use case:
-
-Bulk data ingestion for large-scale patent analysis.
+Official bulk and API-oriented data. Strong for **batch** and compliance; not always the fastest path for a single-number lookup compared to a search API.
 
 ---
 
 # 4. The Lens
 
-Website:
-https://www.lens.org
+**Website:** https://www.lens.org
 
-Description:
-
-The Lens provides open patent and scholarly data.
-
-Advantages:
-
-• global patent coverage
-• good research tools
-
-Limitations:
-
-• API usage limits
-• requires registration
-
-Use case:
-
-Future integration for global patent discovery.
+Global patents + scholarly links. API may require registration and has usage limits. Good for **research** and cross-domain discovery.
 
 ---
 
-# Recommended MVP Data Source
+# Recommended strategy for MVP
 
-For the first version of PatentClarity:
-
-Primary source:
-
-PatentsView API
-
-Reason:
-
-It is free, simple, and reliable for retrieving patent metadata using a patent number.
+- **Primary:** PatentSearch (`search.patentsview.org`) for US-style patent number lookups, as implemented.
+- **Later:** Combine Lens, USPTO bulk, or others for global coverage and analytics.
 
 ---
 
-# Future Data Strategy
+# Future data strategy
 
-Future versions of PatentClarity may combine multiple sources:
-
-• PatentsView
-• Google Patents
-• USPTO datasets
-• global patent APIs
-
-This will allow global patent search and deeper analytics.
+- Multi-source normalization (one internal `PatentMetadata` model)  
+- Caching and persistence to reduce API cost and rate-limit risk  
+- Semantic search and citation graphs (see roadmap)

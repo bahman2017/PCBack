@@ -1,6 +1,6 @@
 # PatentClarity MVP Roadmap
 
-Date: March 17, 2026
+Last updated: March 24, 2026
 
 This document describes the development roadmap for the PatentClarity platform.
 
@@ -30,16 +30,16 @@ POST /api/patents/analyze
 
 Current status:
 
-- Backend API created
-- Placeholder patent metadata service
-- Placeholder AI analysis service
+- Backend API and POST /api/patents/analyze operational
+- Real **PatentSearch** metadata integration (`search.patentsview.org`)
+- **OpenAI**-backed analysis (`gpt-4o-mini`) with JSON structured output and safe parse fallbacks
 
 Next tasks:
 
-1. Integrate real patent metadata API (PatentsView)
-2. Replace placeholder AI service with LLM analysis
-3. Improve commercialization prompts
-4. Add basic logging
+1. PostgreSQL + EF Core persistence and report history
+2. Improve commercialization prompts (versioning, evals)
+3. Add structured logging, metrics, and optional caching for patent metadata / LLM responses
+4. Rate limiting and cost controls
 
 Success metric:
 
