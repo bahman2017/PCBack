@@ -1,7 +1,20 @@
+using Microsoft.EntityFrameworkCore;
 using PCBack.AI;
+using PCBack.Data;
 using PCBack.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseInMemoryDatabase("Testing"));
+}
+else
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+}
 
 builder.Services.AddControllers();
 
@@ -19,7 +32,11 @@ builder.Services.AddScoped<IAiAnalysisService, AiAnalysisService>();
 
 var app = builder.Build();
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHttpsRedirection();
+}
+
 app.MapControllers();
 
 app.Run();

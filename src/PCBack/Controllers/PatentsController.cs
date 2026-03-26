@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PCBack.Data;
 using PCBack.Models;
 using PCBack.Services;
 
@@ -10,11 +12,19 @@ public class PatentsController : ControllerBase
 {
     private readonly IPatentService _patentService;
     private readonly IAiAnalysisService _aiAnalysisService;
+    private readonly ApplicationDbContext _dbContext;
+    private readonly ILogger<PatentsController> _logger;
 
-    public PatentsController(IPatentService patentService, IAiAnalysisService aiAnalysisService)
+    public PatentsController(
+        IPatentService patentService,
+        IAiAnalysisService aiAnalysisService,
+        ApplicationDbContext dbContext,
+        ILogger<PatentsController> logger)
     {
         _patentService = patentService;
         _aiAnalysisService = aiAnalysisService;
+        _dbContext = dbContext;
+        _logger = logger;
     }
 
     /// <summary>
@@ -30,10 +40,12 @@ public class PatentsController : ControllerBase
 
         string abstractToUse;
         PatentMetadata? metadata = null;
+        string? patentNumberInput = null;
 
         if (!string.IsNullOrWhiteSpace(request.PatentNumber))
         {
-            metadata = await _patentService.GetPatentMetadataAsync(request.PatentNumber.Trim());
+            patentNumberInput = request.PatentNumber.Trim();
+            metadata = await _patentService.GetPatentMetadataAsync(patentNumberInput);
             abstractToUse = metadata?.Abstract ?? request.Abstract ?? string.Empty;
         }
         else if (!string.IsNullOrWhiteSpace(request.Abstract))
@@ -57,6 +69,92 @@ public class PatentsController : ControllerBase
                 report.PatentStatus = metadata.PatentStatus;
         }
 
+        try
+        {
+            await PersistReportAsync(report, patentNumberInput);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist patent analysis report; returning response without saving.");
+        }
+
         return Ok(report);
+    }
+
+    /// <summary>
+    /// Returns the 20 most recent persisted patent analyses.
+    /// </summary>
+    [HttpGet("history")]
+    [ProducesResponseType(typeof(IReadOnlyList<PatentAnalysisHistoryItem>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<PatentAnalysisHistoryItem>>> History()
+    {
+        try
+        {
+            var rows = await _dbContext.PatentAnalyses
+                .AsNoTracking()
+                .OrderByDescending(x => x.CreatedAt)
+                .Take(20)
+                .ToListAsync();
+
+            var items = rows.Select(MapToHistoryItem).ToList();
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load patent analysis history.");
+            return Ok(Array.Empty<PatentAnalysisHistoryItem>());
+        }
+    }
+
+    private async Task PersistReportAsync(CommercialReport report, string? patentNumber)
+    {
+        var entity = new PatentAnalysis
+        {
+            Id = Guid.NewGuid(),
+            PatentNumber = patentNumber,
+            Title = report.Title ?? string.Empty,
+            PatentOwner = report.PatentOwner ?? string.Empty,
+            PatentStatus = report.PatentStatus ?? string.Empty,
+            TechnologyTags = JoinList(report.TechnologyTags),
+            PotentialMarkets = JoinList(report.PotentialMarkets),
+            CommercialOpportunities = JoinList(report.CommercialOpportunities),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.PatentAnalyses.Add(entity);
+        await _dbContext.SaveChangesAsync();
+    }
+
+    private static string JoinList(IReadOnlyList<string>? list)
+    {
+        if (list == null || list.Count == 0)
+            return string.Empty;
+
+        return string.Join(",", list.Where(s => !string.IsNullOrWhiteSpace(s)));
+    }
+
+    private static PatentAnalysisHistoryItem MapToHistoryItem(PatentAnalysis row)
+    {
+        return new PatentAnalysisHistoryItem
+        {
+            Id = row.Id,
+            PatentNumber = row.PatentNumber,
+            Title = row.Title,
+            PatentOwner = row.PatentOwner,
+            PatentStatus = row.PatentStatus,
+            TechnologyTags = SplitList(row.TechnologyTags),
+            PotentialMarkets = SplitList(row.PotentialMarkets),
+            CommercialOpportunities = SplitList(row.CommercialOpportunities),
+            CreatedAt = row.CreatedAt
+        };
+    }
+
+    private static List<string> SplitList(string? stored)
+    {
+        if (string.IsNullOrWhiteSpace(stored))
+            return new List<string>();
+
+        return stored.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
     }
 }

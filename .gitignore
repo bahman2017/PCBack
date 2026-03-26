@@ -1,0 +1,14 @@
+# Build
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+
+# IDE / OS
+.vs/
+.idea/
+*.user
+.DS_Store
+
+# NuGet
+*.nupkg

@@ -69,3 +69,29 @@ Analyzes a patent (by number and/or abstract) and returns a commercialization-st
 ```
 
 **Note:** List fields may be empty if OpenAI is not configured, the call fails, or the model response is not valid JSON for the expected shape.
+
+**Persistence:** After the report is built (including metadata overlay), it is saved to PostgreSQL (`patent_analyses`). If the database is unavailable, the endpoint still returns **200** with the same JSON body; a warning is logged.
+
+---
+
+## GET /api/patents/history
+
+Returns up to the **20** most recent persisted analyses, newest first.
+
+### Response
+
+Array of `PatentAnalysisHistoryItem`:
+
+| Field | Type |
+|--------|------|
+| `id` | uuid |
+| `patentNumber` | string \| null |
+| `title` | string |
+| `patentOwner` | string |
+| `patentStatus` | string |
+| `technologyTags` | string[] |
+| `potentialMarkets` | string[] |
+| `commercialOpportunities` | string[] |
+| `createdAt` | datetime (UTC) |
+
+If the database cannot be read, the API returns **200** with an empty array and logs a warning.
