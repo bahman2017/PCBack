@@ -1,14 +1,14 @@
 # PatentClarity – Project Status
 
-Last Updated: 2026-03-24
+Last Updated: 2026-03-25
 
 ---
 
 # Current Phase
 
-MVP Backend – Core AI Patent Analysis Engine
+MVP Backend – AI patent analysis with **persistence** and **automated tests**
 
-The backend supports real patent metadata retrieval (PatentSearch API) and AI-driven commercialization analysis (OpenAI).
+The backend supports PatentSearch metadata, OpenAI-backed commercialization output (when configured), **PostgreSQL storage** of each analysis, and a **history** API.
 
 ---
 
@@ -16,138 +16,110 @@ The backend supports real patent metadata retrieval (PatentSearch API) and AI-dr
 
 ## 1. Backend API (ASP.NET Core)
 
-Project: PCBack
+Project: PCBack (`src/PCBack/`)
 
-Main endpoint:
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/patents/analyze` | POST | Patent number and/or abstract → `CommercialReport` |
+| `/api/patents/history` | GET | Last **20** persisted analyses (newest first) |
 
-POST /api/patents/analyze
+**POST** input (`PatentAnalysisRequest`): optional `patentNumber`, optional `abstract` (at least one required).
 
-Input:
+**POST** output: `CommercialReport` (unchanged contract).
 
-- PatentNumber (optional)
-- Abstract (optional; at least one required)
-
-Output:
-
-Commercialization analysis report (`CommercialReport`).
+After a successful report build, the controller **persists** a row to `patent_analyses`. If the database is unavailable, the API still returns **200** with the report and logs a warning.
 
 ---
 
 ## 2. Patent Metadata Retrieval
 
-Integrated with **PatentsView PatentSearch API** (not the discontinued legacy `api.patentsview.org/patents/query` endpoint).
+Integrated with **PatentsView PatentSearch API**.
 
-- **Endpoint used:** `POST https://search.patentsview.org/api/v1/patents`
-- **Implementation:** `Services/PatentService.cs` with internal DTOs in `Services/PatentsViewDto.cs`
-- **HTTP:** `HttpClient` registered via `AddHttpClient<IPatentService, PatentService>()`; primary handler uses `UseCookies = false` to avoid host-environment issues with `CookieContainer`.
+- **Endpoint:** `POST https://search.patentsview.org/api/v1/patents`
+- **Code:** `Services/PatentService.cs`, `Services/PatentsViewDto.cs`
+- **HTTP:** `AddHttpClient<IPatentService, PatentService>()` with `UseCookies = false` on the primary handler
 
-Retrieved fields (mapped to `PatentMetadata`):
-
-- Patent title
-- Abstract
-- Owner / assignee (first `assignee_organization`)
-- Patent date
-- Status: **Active** or **Expired** (20-year rule from `patent_date`)
-
-Flow:
-
-User input → PatentSearch API → metadata extraction → optional merge into report in controller
+Mapped to `PatentMetadata`: title, abstract, assignee, date, **Active / Expired** (20-year rule).
 
 ---
 
-## 3. AI Prompt Pipeline
+## 3. Data Layer (EF Core + PostgreSQL)
 
-Components under `src/PCBack/AI/`:
+| Item | Details |
+|------|---------|
+| **DbContext** | `Data/ApplicationDbContext.cs` |
+| **Entity** | `Models/PatentAnalysis.cs` → table `patent_analyses` |
+| **Lists in DB** | `TechnologyTags`, `PotentialMarkets`, `CommercialOpportunities` stored comma-separated (MVP) |
+| **Migrations** | `src/PCBack/Migrations/` (e.g. `InitialCreate`) |
+| **Connection** | `ConnectionStrings:DefaultConnection` in `appsettings.json`; **Development** may override locally |
 
-| File | Role |
-|------|------|
-| `PromptTemplates.cs` | Base commercialization prompt; instructs JSON-only output |
-| `PromptBuilder.cs` | Builds prompt from `PatentMetadata` (title + abstract) |
-| `AiClient.cs` | `IAiClient` – OpenAI chat completions |
-| `OpenAiDto.cs` | Request/response DTOs for OpenAI |
-| `AiAnalysisResult.cs` | Parsed LLM JSON (technologyTags, potentialMarkets, commercialOpportunities) |
-
-Orchestration: `Services/AiAnalysisService.cs` (implements `IAiAnalysisService`).
-
-Structured LLM output:
-
-- `technologyTags`
-- `potentialMarkets`
-- `commercialOpportunities`
-
-The model is instructed to return **valid JSON only** (no prose outside the JSON object).
+**Testing / integration tests:** when `ASPNETCORE_ENVIRONMENT` is **Testing**, `Program.cs` registers **EF InMemory** only (no Npgsql) so `WebApplicationFactory` tests do not conflict with PostgreSQL. Production and local dev (non-Testing) use **Npgsql**.
 
 ---
 
-## 4. JSON Parsing System
+## 4. AI Prompt Pipeline
 
-Flow:
+Under `src/PCBack/AI/`: `PromptTemplates`, `PromptBuilder`, `AiClient`, `OpenAiDto`, `AiAnalysisResult`.
 
-LLM text → extract `{ ... }` block (regex) → `JsonSerializer.Deserialize<AiAnalysisResult>` → map to `CommercialReport`
-
-If parsing fails or the response is empty:
-
-- `TechnologyTags`, `PotentialMarkets`, `CommercialOpportunities` end up empty (or empty after failed deserialize).
-- The API does not crash.
+Orchestration: `Services/AiAnalysisService.cs` → JSON-only LLM contract → `CommercialReport` list fields.
 
 ---
 
 ## 5. OpenAI Integration
 
-File: `AI/AiClient.cs`
-
-- **POST** `https://api.openai.com/v1/chat/completions` (relative path `v1/chat/completions` on `HttpClient` base address)
-- **Model:** `gpt-4o-mini`
-- **Configuration:** `OpenAI:ApiKey` in configuration
-
-Recommended:
-
-- Environment variable `OpenAI__ApiKey`, or
-- User Secrets (do not commit keys)
-
-If the API key is missing or the request fails:
-
-- `GenerateAsync` returns an empty string; downstream parsing yields empty lists where applicable.
+`AI/AiClient.cs` → `gpt-4o-mini`, `OpenAI:ApiKey`. Missing key or failed call → empty model text → empty parsed lists where applicable.
 
 ---
 
-## 6. Dependency Injection (`Program.cs`)
+## 6. Application wiring (`Program.cs`)
 
-- `AddHttpClient<IPatentService, PatentService>()` + `SocketsHttpHandler { UseCookies = false }`
-- `AddHttpClient<IAiClient, AiClient>()` with `BaseAddress` `https://api.openai.com/`
-- `AddSingleton<PromptBuilder>()`
-- `AddScoped<IAiAnalysisService, AiAnalysisService>()`
+- `AddDbContext`: **Npgsql** (default + Development) or **InMemory** (**Testing** only)
+- `AddControllers`, `PromptBuilder`, `HttpClient` for `IAiClient` and `IPatentService`
+- **`Program.Markers.cs`:** exposes `partial Program` for `WebApplicationFactory<Program>`
+- HTTPS redirection **skipped** in **Testing** (integration tests use HTTP client)
 
 ---
 
 # Current System Flow
 
-Patent number / abstract → PatentSearch metadata (if number) → `PromptBuilder` → OpenAI → JSON parse → `CommercialReport` (controller fills title/owner/status from metadata when present)
+Patent input → (optional) PatentSearch metadata → `AiAnalysisService` → report → controller merges metadata → **persist** `PatentAnalysis` → JSON response
+
+History: **GET** reads latest rows from the same database.
 
 ---
 
-# Current Limitations (To Be Implemented)
+# Automated tests (`PCBack.Tests/`)
 
-- No database persistence
-- No result caching
-- No user accounts or usage tracking
+| Area | Notes |
+|------|--------|
+| **Unit-style** | `Fakes/AiAnalysisServiceFake` + `Tests/CacheTests.cs` (InMemory, cache hit/miss patterns) |
+| **Integration** | `TestInfrastructure/CustomWebApplicationFactory.cs` + `Fakes/FakeAiAnalysisService.cs` + `Tests/IntegrationTests.cs` — real HTTP pipeline, InMemory DB, **no OpenAI** |
+
+Run: `dotnet test` from repo root.
+
+---
+
+# Current Limitations (Next)
+
+- No cross-request **cache** in production API (only test fakes model “cache”)
+- No user accounts, auth, or usage metering
+- No distributed cache / read replicas
 
 ---
 
 # Next Development Phase
 
-**Phase: Data persistence**
-
-1. PostgreSQL + EF Core
-2. `PatentAnalysis` / result tables
-3. Metadata and analysis history caching
+- Result / metadata **caching** (Redis or DB-backed)
+- Auth, rate limits, billing
+- Stronger prompt evaluation and monitoring
 
 ---
 
 # Project Health
 
 Backend: stable  
-AI integration: operational when `OpenAI:ApiKey` is set  
-Build: successful
+Persistence: PostgreSQL in non-Testing environments  
+AI: operational when `OpenAI:ApiKey` is set  
+Tests: **xUnit** — unit + `WebApplicationFactory` integration  
 
-Next focus: persistence and cost optimization.
+Next focus: caching, cost controls, SaaS hardening.
