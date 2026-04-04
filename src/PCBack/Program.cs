@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using PCBack.AI;
 using PCBack.Data;
+using PCBack.Models;
 using PCBack.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.SectionName));
 
 if (builder.Environment.IsEnvironment("Testing"))
 {
@@ -29,6 +32,9 @@ builder.Services.AddHttpClient<IAiClient, AiClient>(client =>
 builder.Services.AddHttpClient<IPatentService, PatentService>()
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseCookies = false });
 builder.Services.AddScoped<IAiAnalysisService, AiAnalysisService>();
+builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddSingleton<IPdfService, PdfService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
 
 var app = builder.Build();
 

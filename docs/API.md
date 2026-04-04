@@ -95,3 +95,72 @@ Array of `PatentAnalysisHistoryItem`:
 | `createdAt` | datetime (UTC) |
 
 If the database cannot be read, the API returns **200** with an empty array and logs a warning.
+
+---
+
+## GET /api/patents/{id}
+
+Returns a single persisted analysis as `CommercialReport` (same shape as **POST** `/api/patents/analyze`).
+
+### Path parameter
+
+| Field | Type |
+|--------|------|
+| `id` | uuid (analysis / report row id) |
+
+### Response
+
+- **200** – `CommercialReport` body  
+- **404** – no row with that id  
+
+---
+
+## GET /api/reports/{id}/pdf
+
+Downloads a PDF built from the persisted report.
+
+### Path parameter
+
+| Field | Type |
+|--------|------|
+| `id` | uuid (same id as history items and patents GET) |
+
+### Response
+
+- **200** – `Content-Type: application/pdf`; suggested filename `report-{id}.pdf`  
+- **404** – no persisted report for that id  
+
+---
+
+## POST /api/payments/checkout
+
+Starts a checkout session for a persisted report (MVP: returns a **mock** URL; no real payment provider).
+
+### Request body
+
+`PaymentCheckoutRequest`
+
+| Field | Type | Required |
+|--------|------|----------|
+| `reportId` | uuid | Yes (non-empty) |
+
+### Response
+
+`PaymentCheckoutResponse`
+
+| Field | Type |
+|--------|------|
+| `checkoutUrl` | string |
+
+Example mock URL pattern: `https://fake-checkout.patentclarity.com/session/{reportId}` (when `Payment:Mode` is **Mock** in configuration).
+
+### Status codes
+
+| Code | Meaning |
+|------|---------|
+| **200** | Checkout URL returned |
+| **400** | Missing body or invalid / empty `reportId` |
+| **404** | No persisted report for `reportId` |
+| **501** | `Payment:Mode` is **Stripe** (not integrated yet) |
+
+**Configuration:** `appsettings.json` → `"Payment": { "Mode": "Mock" }` (or `Stripe` for future use).

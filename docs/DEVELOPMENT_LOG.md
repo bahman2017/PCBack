@@ -37,3 +37,20 @@ Implemented:
 Documentation updated under `docs/` to match current architecture.
 
 Next: PostgreSQL / EF Core, caching, users, usage tracking.
+
+---
+
+## 2026-04-04
+
+Persistence-backed reports extended with retrieval, PDF, and mock payments.
+
+Implemented (aligned with `src/PCBack/`):
+
+- **GET** `/api/patents/{id}` — load persisted `CommercialReport` by analysis id (`IReportService`)
+- **ReportsController** — **GET** `/api/reports/{id}/pdf` via `IPdfService` (QuestPDF)
+- **PaymentsController** — **POST** `/api/payments/checkout`; **`IPaymentService`** validates report exists, returns mock URL when **`Payment:Mode`** is **Mock**; **`PaymentMode.Stripe`** reserved (501 until integrated)
+- **`PaymentOptions`** + configuration section **`Payment`** in `appsettings.json`
+
+Documentation: `docs/PROJECT_STATUS.md`, `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/MVP_ROADMAP.md` updated to match.
+
+Next: Stripe (or other PSP), auth, caching, optional analyze response including persisted id.

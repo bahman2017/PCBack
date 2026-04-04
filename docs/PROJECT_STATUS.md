@@ -1,14 +1,14 @@
 # PatentClarity – Project Status
 
-Last Updated: 2026-03-25
+Last Updated: 2026-04-04
 
 ---
 
 # Current Phase
 
-MVP Backend – AI patent analysis with **persistence** and **automated tests**
+MVP Backend – AI patent analysis with **persistence**, **report retrieval**, **PDF export**, **mock checkout**, and **automated tests**
 
-The backend supports PatentSearch metadata, OpenAI-backed commercialization output (when configured), **PostgreSQL storage** of each analysis, and a **history** API.
+The backend supports PatentSearch metadata, OpenAI-backed commercialization output (when configured), **PostgreSQL** storage of each analysis, **history** and **by-id** APIs, **PDF** generation for a saved report, and a **payments checkout** endpoint that returns a placeholder URL (no real Stripe yet).
 
 ---
 
@@ -20,14 +20,19 @@ Project: PCBack (`src/PCBack/`)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/patents/analyze` | POST | Patent number and/or abstract → `CommercialReport` |
+| `/api/patents/analyze` | POST | Patent number and/or abstract → `CommercialReport` (persisted when DB available) |
 | `/api/patents/history` | GET | Last **20** persisted analyses (newest first) |
+| `/api/patents/{id}` | GET | Single persisted report by id (`CommercialReport` shape); **404** if missing |
+| `/api/reports/{id}/pdf` | GET | PDF download for persisted report; **404** if missing |
+| `/api/payments/checkout` | POST | Body `{ "reportId": "<guid>" }` → `{ "checkoutUrl": "<url>" }` (mock); **404** if report missing |
 
-**POST** input (`PatentAnalysisRequest`): optional `patentNumber`, optional `abstract` (at least one required).
+**POST** `/api/patents/analyze` input (`PatentAnalysisRequest`): optional `patentNumber`, optional `abstract` (at least one required).
 
-**POST** output: `CommercialReport` (unchanged contract).
+**POST** output: `CommercialReport` (unchanged contract). The persisted row’s **id** is not returned on this response; clients can use **`GET /api/patents/history`** (`id` on each item) or poll after UX flows that store ids server-side.
 
 After a successful report build, the controller **persists** a row to `patent_analyses`. If the database is unavailable, the API still returns **200** with the report and logs a warning.
+
+**POST** `/api/payments/checkout`: **400** if body missing or `reportId` empty; **501** if `Payment:Mode` is **Stripe** (not implemented). Default mode is **Mock** (`appsettings.json` → `Payment:Mode`).
 
 ---
 
@@ -71,10 +76,24 @@ Orchestration: `Services/AiAnalysisService.cs` → JSON-only LLM contract → `C
 
 ---
 
-## 6. Application wiring (`Program.cs`)
+## 6. Reports, PDF, and payments (service layer)
 
+| Service | Role |
+|---------|------|
+| **`IReportService` / `ReportService`** | Load persisted `CommercialReport` by analysis id (used by patents GET, reports PDF, payments) |
+| **`IPdfService` / `PdfService`** | Build PDF bytes from `CommercialReport` (QuestPDF) |
+| **`IPaymentService` / `PaymentService`** | Validate report exists; **`PaymentMode.Mock`** → fake checkout URL; **`Stripe`** → not implemented |
+
+Configuration: **`Payment`** section (`Models/PaymentOptions.cs`), enum **`PaymentMode`**: `Mock` | `Stripe`. Registered via `Configure<PaymentOptions>(...)` in `Program.cs`.
+
+---
+
+## 7. Application wiring (`Program.cs`)
+
+- `Configure<PaymentOptions>` from configuration section **`Payment`**
 - `AddDbContext`: **Npgsql** (default + Development) or **InMemory** (**Testing** only)
 - `AddControllers`, `PromptBuilder`, `HttpClient` for `IAiClient` and `IPatentService`
+- Scoped: `IAiAnalysisService`, `IReportService`, `IPaymentService`; singleton: `IPdfService`
 - **`Program.Markers.cs`:** exposes `partial Program` for `WebApplicationFactory<Program>`
 - HTTPS redirection **skipped** in **Testing** (integration tests use HTTP client)
 
@@ -86,12 +105,18 @@ Patent input → (optional) PatentSearch metadata → `AiAnalysisService` → re
 
 History: **GET** reads latest rows from the same database.
 
+By id: **GET** `/api/patents/{id}` maps DB row → `CommercialReport`.
+
+PDF: **GET** `/api/reports/{id}/pdf` loads report → `PdfService` → `application/pdf`.
+
+Checkout: **POST** `/api/payments/checkout` ensures report exists → returns mock URL when mode is **Mock**.
+
 ---
 
 # Automated tests (`PCBack.Tests/`)
 
 | Area | Notes |
-|------|--------|
+|------|-------|
 | **Unit-style** | `Fakes/AiAnalysisServiceFake` + `Tests/CacheTests.cs` (InMemory, cache hit/miss patterns) |
 | **Integration** | `TestInfrastructure/CustomWebApplicationFactory.cs` + `Fakes/FakeAiAnalysisService.cs` + `Tests/IntegrationTests.cs` — real HTTP pipeline, InMemory DB, **no OpenAI** |
 
@@ -103,14 +128,18 @@ Run: `dotnet test` from repo root.
 
 - No cross-request **cache** in production API (only test fakes model “cache”)
 - No user accounts, auth, or usage metering
+- **Payments:** mock URL only; **Stripe** not wired (`Payment:Mode` → **501** if set to Stripe)
+- **POST** `/api/patents/analyze` does not echo the new row’s **id** in the JSON body
 - No distributed cache / read replicas
 
 ---
 
 # Next Development Phase
 
+- **Stripe** (or other provider) behind `PaymentMode.Stripe`
 - Result / metadata **caching** (Redis or DB-backed)
 - Auth, rate limits, billing
+- Optional: include persisted **id** on analyze response or redirect client to created resource
 - Stronger prompt evaluation and monitoring
 
 ---
@@ -119,7 +148,8 @@ Run: `dotnet test` from repo root.
 
 Backend: stable  
 Persistence: PostgreSQL in non-Testing environments  
+Reports / PDF / mock checkout: implemented  
 AI: operational when `OpenAI:ApiKey` is set  
 Tests: **xUnit** — unit + `WebApplicationFactory` integration  
 
-Next focus: caching, cost controls, SaaS hardening.
+Next focus: real payments, caching, cost controls, SaaS hardening.

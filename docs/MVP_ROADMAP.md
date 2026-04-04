@@ -1,6 +1,6 @@
 # PatentClarity MVP Roadmap
 
-Last updated: March 24, 2026
+Last updated: April 4, 2026
 
 This document describes the development roadmap for the PatentClarity platform.
 
@@ -33,13 +33,17 @@ Current status:
 - Backend API and POST /api/patents/analyze operational
 - Real **PatentSearch** metadata integration (`search.patentsview.org`)
 - **OpenAI**-backed analysis (`gpt-4o-mini`) with JSON structured output and safe parse fallbacks
+- **PostgreSQL + EF Core** persistence, **GET** history and **GET** report by id
+- **PDF** export (**GET** `/api/reports/{id}/pdf`)
+- **Mock** payment checkout (**POST** `/api/payments/checkout`) — placeholder URL; **Stripe** enum reserved, not implemented
 
 Next tasks:
 
-1. PostgreSQL + EF Core persistence and report history
+1. Real **payment provider** (e.g. Stripe) when `PaymentMode.Stripe` is selected
 2. Improve commercialization prompts (versioning, evals)
 3. Add structured logging, metrics, and optional caching for patent metadata / LLM responses
 4. Rate limiting and cost controls
+5. Optional: return persisted report **id** from analyze (or `201` + `Location`) for simpler client checkout flows
 
 Success metric:
 
@@ -54,18 +58,19 @@ Turn the prototype into a usable SaaS product.
 
 New features:
 
-• PostgreSQL database
-• User accounts
-• Authentication
-• Report history
-• PDF export of reports
-• Payment integration
+• PostgreSQL database *(done for analyses)*  
+• User accounts  
+• Authentication  
+• Report history *(done — list + by id)*  
+• PDF export of reports *(done)*  
+• Payment integration *(mock checkout done; live billing TBD)*  
 
 Architecture additions:
 
-• Database persistence
-• Report storage
-• User management
+• Database persistence *(in place)*  
+• Report storage *(in place)*  
+• User management  
+• Live PSP webhooks and entitlement rules
 
 Success metric:
 

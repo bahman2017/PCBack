@@ -12,19 +12,37 @@ public class PatentsController : ControllerBase
 {
     private readonly IPatentService _patentService;
     private readonly IAiAnalysisService _aiAnalysisService;
+    private readonly IReportService _reportService;
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<PatentsController> _logger;
 
     public PatentsController(
         IPatentService patentService,
         IAiAnalysisService aiAnalysisService,
+        IReportService reportService,
         ApplicationDbContext dbContext,
         ILogger<PatentsController> logger)
     {
         _patentService = patentService;
         _aiAnalysisService = aiAnalysisService;
+        _reportService = reportService;
         _dbContext = dbContext;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Returns a persisted commercial report by id (same JSON shape as POST /analyze).
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(CommercialReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CommercialReport>> GetById(Guid id)
+    {
+        var report = await _reportService.GetByIdAsync(id);
+        if (report == null)
+            return NotFound();
+
+        return Ok(report);
     }
 
     /// <summary>
